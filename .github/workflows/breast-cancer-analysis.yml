@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "scripts/analyze_gse183947.R"
+      - "scripts/pathway_enrichment_gse183947.py"
       - ".github/workflows/breast-cancer-analysis.yml"
   pull_request:
     branches: [main]
@@ -34,6 +35,9 @@ jobs:
 
       - name: Run paired breast cancer analysis
         run: Rscript scripts/analyze_gse183947.R
+
+      - name: Run directional pathway enrichment
+        run: python scripts/pathway_enrichment_gse183947.py
 
       - name: Upload analysis outputs
         if: always()
