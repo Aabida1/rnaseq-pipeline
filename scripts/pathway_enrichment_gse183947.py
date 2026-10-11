@@ -30,6 +30,34 @@ def read_results(path):
     return rows
 
 
+def extract_overlap_genes(term, query):
+    # g:Profiler's "intersections" field contains per-query-gene evidence
+    # arrays, not gene symbols. Map non-empty evidence entries back to the
+    # exact ordered query list submitted to g:Profiler.
+    intersections = term.get("intersections")
+    if isinstance(intersections, list) and len(intersections) == len(query):
+        genes = [gene for gene, evidence in zip(query, intersections) if evidence]
+        if genes:
+            return ";".join(genes)
+
+    # Some API/client versions expose an explicit intersection list instead.
+    intersection = term.get("intersection")
+    if isinstance(intersection, list):
+        genes = []
+        for item in intersection:
+            if isinstance(item, str):
+                genes.append(item)
+            elif isinstance(item, dict):
+                value = item.get("name") or item.get("gene") or item.get("id")
+                if value:
+                    genes.append(str(value))
+        if genes:
+            return ";".join(dict.fromkeys(genes))
+    if isinstance(intersection, str):
+        return intersection
+    return ""
+
+
 def run_gprofiler(label, query, background):
     payload = {
         "organism": "hsapiens",
@@ -79,20 +107,7 @@ def run_gprofiler(label, query, background):
 
     rows = []
     for term in body:
-        # Support response variants from g:Profiler's overlap field.
-        overlap = term.get("intersection", term.get("intersections", [])) or []
-        if isinstance(overlap, dict):
-            overlap = overlap.get("query", overlap.get("genes", [])) or []
-        if isinstance(overlap, str):
-            overlap_genes = overlap
-        elif isinstance(overlap, list):
-            overlap_genes = ";".join(
-                str(gene.get("name", gene.get("id", gene.get("gene", ""))))
-                if isinstance(gene, dict) else str(gene)
-                for gene in overlap
-            )
-        else:
-            overlap_genes = ""
+        overlap_genes = extract_overlap_genes(term, query)
         rows.append({
             "direction": label,
             "source": term.get("source", ""),
@@ -142,6 +157,7 @@ def main():
             "sources": SOURCES,
             "correction": "g:SCS, threshold 0.05",
             "n_background": len(background),
+            "background_note": "Unique gene symbols from the limma result table; custom domain scope",
             "n_significant": len(significant),
             "n_up": len(up),
             "n_down": len(down),
