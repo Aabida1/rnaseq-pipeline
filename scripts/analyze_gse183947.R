@@ -30,12 +30,14 @@ download_if_missing <- function(url, path) {
 download_if_missing(fpkm_url, fpkm_file)
 download_if_missing(matrix_url, matrix_file)
 
-# Read GEO sample metadata from the series matrix.
+# Read GEO sample metadata from the series matrix. Remove the field label and
+# its first tab before splitting, so an empty first field cannot shift samples.
 geo_lines <- readLines(gzfile(matrix_file), warn = FALSE)
 extract_geo_row <- function(prefix) {
-  line <- geo_lines[startsWith(geo_lines, prefix)]
+  line <- geo_lines[startsWith(geo_lines, paste0(prefix, "\t"))]
   if (length(line) != 1) stop("Expected exactly one GEO metadata row: ", prefix)
-  values <- strsplit(sub(paste0("^", prefix), "", line), "\t", fixed = TRUE)[[1]]
+  payload <- sub(paste0("^", prefix, "\t"), "", line)
+  values <- strsplit(payload, "\t", fixed = TRUE)[[1]]
   values <- gsub('^"|"$', "", values)
   values
 }
@@ -72,8 +74,8 @@ if (any(table(metadata$condition) != 30)) {
        paste(names(table(metadata$condition)), table(metadata$condition), collapse = ", "))
 }
 
-# Matrix columns are in GEO sample order for this accession. Assert dimensions
-# before attaching metadata; never silently recycle or truncate labels.
+# The GEO supplementary matrix uses sample columns in GEO series order. The
+# sample count and group structure are asserted before metadata are attached.
 fpkm <- read.csv(gzfile(fpkm_file), check.names = FALSE, stringsAsFactors = FALSE)
 if (ncol(fpkm) != 61) {
   stop("Expected one gene-ID column plus 60 sample columns; observed ", ncol(fpkm), " columns.")
@@ -84,10 +86,7 @@ storage.mode(expr) <- "numeric"
 rownames(expr) <- make.unique(gene_ids)
 if (ncol(expr) != nrow(metadata)) stop("Expression matrix and GEO metadata sample counts differ.")
 if (any(!is.finite(expr)) || any(expr < 0)) stop("FPKM matrix contains invalid or negative values.")
-if (anyDuplicated(rownames(expr))) stop("Gene identifiers are not unique after import.")
 
-# Reorder metadata by the paired design labels; expression columns follow the
-# GEO series order. The pairing labels are checked explicitly above.
 metadata$condition <- factor(metadata$condition, levels = c("normal", "tumor"))
 metadata$pair <- factor(metadata$pair, levels = paste0("pair", 1:30))
 rownames(metadata) <- metadata$geo_accession
@@ -95,8 +94,7 @@ colnames(expr) <- metadata$geo_accession
 write.csv(metadata, file.path(outdir, "sample_metadata.csv"), row.names = FALSE)
 
 # This is processed FPKM data, not raw counts. Paired limma is used for an
-# exploratory tumour-vs-normal comparison; results should not be described as
-# count-based DESeq2 output.
+# exploratory tumour-vs-normal comparison; results are not DESeq2 output.
 log_expr <- log2(expr + 1)
 design <- model.matrix(~ pair + condition, data = metadata)
 fit <- lmFit(log_expr, design)
@@ -110,7 +108,6 @@ write.csv(res, file.path(outdir, "limma_tumor_vs_normal_all_genes.csv"), row.nam
 write.csv(subset(res, adj.P.Val < 0.05),
           file.path(outdir, "limma_tumor_vs_normal_FDR05.csv"), row.names = FALSE)
 
-# Compact QC plots, using base graphics to keep dependencies minimal.
 pdf(file.path(outdir, "expression_pca.pdf"), width = 8, height = 6)
 pca <- prcomp(t(log_expr), scale. = FALSE)
 plot(pca$x[, 1], pca$x[, 2],
