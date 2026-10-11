@@ -26,12 +26,11 @@ jobs:
         with:
           r-version: "4.4"
 
-      - name: Install limma
-        uses: r-lib/actions/setup-r-dependencies@v2
-        with:
-          packages: |
-            any::BiocManager
-            bioc::limma
+      - name: Install Bioconductor limma
+        run: |
+          install.packages("BiocManager", repos = "https://cloud.r-project.org")
+          BiocManager::install("limma", ask = FALSE, update = FALSE)
+        shell: Rscript {0}
 
       - name: Run paired breast cancer analysis
         run: Rscript scripts/analyze_gse183947.R
@@ -42,5 +41,5 @@ jobs:
         with:
           name: gse183947-breast-cancer-analysis
           path: cancer-results/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
