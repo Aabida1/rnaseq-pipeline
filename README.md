@@ -19,6 +19,21 @@ This repository is intended to keep the reproduced upstream baseline distinguish
 - **Test data:** Bundled upstream technical fixtures; no biological interpretation.
 - **Automation:** [GitHub Actions](https://github.com/Aabida1/rnaseq-pipeline/actions).
 
+## Verified technical test run
+
+The first GitHub Actions run completed successfully on 11 October 2026.
+
+| Check | Observed result |
+|---|---|
+| Nextflow | 26.04.6 |
+| Workflow profile | Docker |
+| Tasks | 7 succeeded, 0 failed |
+| Processes completed | INPUT_CHECK, FASTQC, FASTP, STAR_GENOMEGENERATE, STAR_ALIGN, FEATURECOUNTS, MULTIQC |
+| Reported workflow duration | 46.9 seconds |
+| Pinned upstream revision | `7f56d14454948e295bae1db810a0f85e995a9d28` |
+
+Evidence: [successful GitHub Actions run #1](https://github.com/Aabida1/rnaseq-pipeline/actions/runs/38166500002). The uploaded execution trace shows exit code 0 for all seven tasks. This verifies successful execution of the small technical fixture in that runner environment only. It does not establish human RNA-seq performance, biological validity, alignment quality thresholds, or accuracy of downstream scientific conclusions.
+
 ## Run locally
 
 Prerequisites: Git, Java compatible with Nextflow, Nextflow 26.04.6, and Docker.
@@ -40,7 +55,7 @@ Refer to the upstream README for current parameter behavior and optional branche
 
 ## Evidence and limitations
 
-Each GitHub Actions run should be treated as the execution record for the pinned technical fixture. Download the uploaded `upstream-baseline-reports` artifact from the workflow run to inspect retained reports/logs. Passing the fixture demonstrates only that the tested workflow executes on that environment; it does **not** validate performance on other datasets, establish biological findings, or independently verify every optional pipeline branch.
+Each GitHub Actions run is the execution record for the pinned technical fixture. Download the `upstream-baseline-reports` artifact from the workflow run to inspect retained reports and outputs. Passing the fixture demonstrates only that the tested workflow executes on that environment; it does **not** validate performance on other datasets, establish biological findings, or independently verify every optional pipeline branch.
 
 The reproduced code remains upstream-authored. Any later changes should be added as clearly labelled, independently authored improvements with their own tests, commits, and comparison against this baseline.
 
