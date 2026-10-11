@@ -108,12 +108,15 @@ metadata$pair <- factor(metadata$pair, levels = paste0("donor", sort(unique(meta
 rownames(metadata) <- metadata$geo_accession
 colnames(expr) <- metadata$geo_accession
 write.csv(metadata, file.path(outdir, "sample_metadata.csv"), row.names = FALSE)
+pair_ids <- sort(unique(metadata$donor_id))
+tumor_meta <- metadata[metadata$condition == "tumor", , drop = FALSE]
+normal_meta <- metadata[metadata$condition == "normal", , drop = FALSE]
 write.csv(data.frame(
-  donor_id = sort(unique(metadata$donor_id)),
-  tumor_sample = metadata$geo_accession[match(sort(unique(metadata$donor_id)),
-    metadata$donor_id[metadata$condition == "tumor"])],
-  normal_sample = metadata$geo_accession[match(sort(unique(metadata$donor_id)),
-    metadata$donor_id[metadata$condition == "normal"])],
+  donor_id = pair_ids,
+  tumor_sample = tumor_meta$geo_accession[match(pair_ids, tumor_meta$donor_id)],
+  tumor_matrix_column = tumor_meta$sample_description[match(pair_ids, tumor_meta$donor_id)],
+  normal_sample = normal_meta$geo_accession[match(pair_ids, normal_meta$donor_id)],
+  normal_matrix_column = normal_meta$sample_description[match(pair_ids, normal_meta$donor_id)],
   stringsAsFactors = FALSE
 ), file.path(outdir, "sample_pair_validation.csv"), row.names = FALSE)
 
