@@ -52,18 +52,19 @@ if (length(geo_ids) != 60 || length(geo_titles) != 60 ||
 # GEO characteristics are stored as repeated rows (one row per characteristic
 # key), not necessarily in !Sample_description. Parse tissue and donor explicitly.
 extract_characteristic <- function(key) {
-  prefix <- "!Sample_characteristics_ch1\\t"
-  lines <- geo_lines[startsWith(geo_lines, prefix)]
+  tag <- "!Sample_characteristics_ch1"
+  lines <- geo_lines[startsWith(geo_lines, tag)]
   matching <- lines[vapply(lines, function(line) {
-    payload <- sub(prefix, "", line, fixed = TRUE)
-    first_value <- strsplit(payload, "\\t", fixed = TRUE)[[1]][1]
+    payload <- sub("^!Sample_characteristics_ch1[[:space:]]+", "", line)
+    first_value <- strsplit(payload, "\t", fixed = TRUE)[[1]][1]
     first_value <- gsub('^"|"$', "", first_value)
     grepl(paste0("^", key, "\\s*:"), first_value, ignore.case = TRUE)
   }, logical(1))]
   if (length(matching) != 1) {
     stop("Expected one GEO characteristic row for '", key, "'; found ", length(matching), ".")
   }
-  values <- strsplit(sub(prefix, "", matching), "\\t", fixed = TRUE)[[1]]
+  payload <- sub("^!Sample_characteristics_ch1[[:space:]]+", "", matching)
+  values <- strsplit(payload, "\t", fixed = TRUE)[[1]]
   values <- gsub('^"|"$', "", values)
   if (length(values) != 60) {
     stop("Expected 60 values for GEO characteristic '", key, "'; found ", length(values), ".")
