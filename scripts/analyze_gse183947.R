@@ -49,23 +49,44 @@ if (length(geo_ids) != 60 || length(geo_titles) != 60 ||
   stop("Expected 60 GEO samples; found ", length(geo_ids), " IDs, ",
        length(geo_titles), " titles, and ", length(geo_descriptions), " descriptions.")
 }
+# GEO characteristics are stored as repeated rows (one row per characteristic
+# key), not necessarily in !Sample_description. Parse tissue and donor explicitly.
+extract_characteristic <- function(key) {
+  prefix <- "!Sample_characteristics_ch1\\t"
+  lines <- geo_lines[startsWith(geo_lines, prefix)]
+  matching <- lines[vapply(lines, function(line) {
+    payload <- sub(prefix, "", line, fixed = TRUE)
+    first_value <- strsplit(payload, "\\t", fixed = TRUE)[[1]][1]
+    first_value <- gsub('^"|"$', "", first_value)
+    grepl(paste0("^", key, "\\s*:"), first_value, ignore.case = TRUE)
+  }, logical(1))]
+  if (length(matching) != 1) {
+    stop("Expected one GEO characteristic row for '", key, "'; found ", length(matching), ".")
+  }
+  values <- strsplit(sub(prefix, "", matching), "\\t", fixed = TRUE)[[1]]
+  values <- gsub('^"|"$', "", values)
+  if (length(values) != 60) {
+    stop("Expected 60 values for GEO characteristic '", key, "'; found ", length(values), ".")
+  }
+  sub(paste0("^", key, "\\s*:\\s*"), "", values, ignore.case = TRUE)
+}
+tissue_values <- extract_characteristic("tissue")
+donor_values <- extract_characteristic("donor")
 metadata <- data.frame(
   geo_accession = geo_ids,
   title = geo_titles,
   sample_description = geo_descriptions,
+  tissue = tissue_values,
+  donor_characteristic = donor_values,
   stringsAsFactors = FALSE
 )
-metadata$condition <- ifelse(grepl("tumou?r", metadata$title, ignore.case = TRUE),
+metadata$condition <- ifelse(grepl("breast tumor", metadata$tissue, ignore.case = TRUE),
                              "tumor",
-                             ifelse(grepl("normal", metadata$title, ignore.case = TRUE),
+                             ifelse(grepl("normal breast tissue", metadata$tissue, ignore.case = TRUE),
                                     "normal", NA_character_))
-# The supplementary FPKM matrix uses donor IDs in its column names:
-# CA.<donor> for tumour and CAP.<donor> for matched normal tissue.
-# Match on these IDs rather than assuming matrix columns follow GEO order.
-metadata$donor_id <- sub("^(CAP?|CA)\\.?([0-9]+)$", "\\2",
-                         metadata$sample_description, perl = TRUE)
+metadata$donor_id <- trimws(metadata$donor_characteristic)
 if (anyNA(metadata$condition) || any(!grepl("^[0-9]+$", metadata$donor_id))) {
-  stop("Could not parse condition or donor ID from GEO sample metadata.")
+  stop("Could not parse condition or donor ID from GEO tissue/donor characteristics.")
 }
 metadata$pair <- paste0("donor", metadata$donor_id)
 if (anyDuplicated(metadata$pair[metadata$condition == "tumor"]) ||
@@ -75,7 +96,7 @@ if (anyDuplicated(metadata$pair[metadata$condition == "tumor"]) ||
 tumor_donors <- sort(metadata$donor_id[metadata$condition == "tumor"])
 normal_donors <- sort(metadata$donor_id[metadata$condition == "normal"])
 if (!identical(tumor_donors, normal_donors)) {
-  stop("Tumour and normal donor IDs do not match. Do not infer pairs from replicate numbers.")
+  stop("Tumour and normal donor IDs from GEO characteristics do not match. Inspect GEO metadata; do not infer pairs from replicate numbers.")
 }
 if (any(table(metadata$condition) != 30)) {
   stop("Expected 30 tumour and 30 normal samples; observed: ",
