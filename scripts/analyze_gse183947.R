@@ -72,20 +72,27 @@ extract_characteristic <- function(key) {
   }
   sub(paste0("^", key, "[[:space:]]*:[[:space:]]*"), "", values, ignore.case = TRUE)
 }
-tissue_values <- extract_characteristic("tissue");
+tissue_values <- extract_characteristic("tissue")
+donor_values <- extract_characteristic("donor")
 metadata <- data.frame(
   geo_accession = geo_ids,
   title = geo_titles,
   sample_description = geo_descriptions,
   tissue = tissue_values,
+  donor_characteristic = donor_values,
   stringsAsFactors = FALSE
-);
+)
 metadata$condition <- ifelse(grepl("breast tumor", metadata$tissue, ignore.case = TRUE),
                              "tumor",
                              ifelse(grepl("normal breast tissue", metadata$tissue, ignore.case = TRUE),
-                                    "normal", NA_character_));
+                                    "normal", NA_character_))
 if (anyNA(metadata$condition)) {
-  stop("Could not parse tumour/normal condition from GEO tissue characteristics.");
+  stop("Could not parse tumour/normal condition from GEO tissue characteristics.")
+}
+metadata$donor_id <- sub("^donor[[:space:]]*:[[:space:]]*", "", metadata$donor_characteristic,
+                         ignore.case = TRUE)
+if (anyNA(metadata$donor_id) || any(!nzchar(metadata$donor_id))) {
+  stop("Could not parse donor IDs from GEO donor characteristics.")
 }
 
 fpkm <- read.csv(gzfile(fpkm_file), check.names = FALSE, stringsAsFactors = FALSE)
@@ -97,50 +104,45 @@ expr <- as.matrix(fpkm[, -1, drop = FALSE])
 storage.mode(expr) <- "numeric"
 rownames(expr) <- make.unique(gene_ids)
 matrix_samples <- colnames(expr)
-if (length(matrix_samples) != 60 || !setequal(matrix_samples, metadata$sample_description)) {
-  missing_in_matrix <- setdiff(metadata$sample_description, matrix_samples)
-  extra_in_matrix <- setdiff(matrix_samples, metadata$sample_description)
-  stop("GEO metadata and FPKM matrix sample IDs do not match. Missing matrix IDs: ",
-       paste(missing_in_matrix, collapse = ", "), "; extra matrix IDs: ",
-       paste(extra_in_matrix, collapse = ", "))
+if (length(matrix_samples) != 60 ||
+    any(!grepl("^(CA|CAP)\\.[0-9]+$", matrix_samples))) {
+  stop("Expected 60 FPKM sample columns named CA.<donor> or CAP.<donor>.")
 }
-# Derive donor IDs and condition directly from matrix column identifiers.
-# CA.<ID> = tumour; CAP.<ID> = matched normal. Do not pair by replicate number
-# or rely on GEO characteristic-row ordering for donor identity.
-matrix_id <- metadata$sample_description
-is_tumor_id <- grepl("^CA\\.[0-9]+$", matrix_id)
-is_normal_id <- grepl("^CAP\\.[0-9]+$", matrix_id)
-if (any(!(is_tumor_id | is_normal_id))) {
-  stop("Unexpected FPKM matrix sample identifiers: ",
-       paste(matrix_id[!(is_tumor_id | is_normal_id)], collapse = ", "));
+# Map GEO samples to the FPKM matrix by explicit donor characteristic and tissue,
+# not by GEO sample description, title order, or replicate number.
+metadata$matrix_condition <- ifelse(metadata$condition == "tumor", "CA", "CAP")
+metadata$matrix_column <- paste0(metadata$matrix_condition, ".", metadata$donor_id)
+if (anyDuplicated(metadata$matrix_column)) {
+  stop("Duplicate GEO donor/tissue mapping: ", paste(unique(metadata$matrix_column[duplicated(metadata$matrix_column)]), collapse = ", "))
 }
-metadata$matrix_condition <- ifelse(is_tumor_id, "tumor", "normal");
-metadata$donor_id <- sub("^(CAP|CA)\\.", "", matrix_id);
-if (any(metadata$condition != metadata$matrix_condition)) {
-  bad <- which(metadata$condition != metadata$matrix_condition);
-  stop("GEO tissue labels disagree with FPKM column prefixes for: ",
-       paste(paste0(metadata$geo_accession[bad], "=", matrix_id[bad]), collapse = ", "));
+missing_matrix <- setdiff(metadata$matrix_column, matrix_samples)
+unmapped_matrix <- setdiff(matrix_samples, metadata$matrix_column)
+if (length(missing_matrix) || length(unmapped_matrix)) {
+  stop("GEO donor/tissue mapping does not match FPKM columns. Missing matrix columns: ",
+       paste(missing_matrix, collapse = ", "), "; unmapped matrix columns: ",
+       paste(unmapped_matrix, collapse = ", "))
 }
-metadata$pair <- paste0("donor", metadata$donor_id);
+metadata$pair <- paste0("donor", metadata$donor_id)
 if (anyDuplicated(metadata$pair[metadata$condition == "tumor"]) ||
     anyDuplicated(metadata$pair[metadata$condition == "normal"])) {
-  stop("Duplicate donor IDs found within a condition based on FPKM column names.");
+  stop("Duplicate donor IDs found within a condition.")
 }
-tumor_donors <- sort(metadata$donor_id[metadata$condition == "tumor"]);
-normal_donors <- sort(metadata$donor_id[metadata$condition == "normal"]);
+tumor_donors <- sort(metadata$donor_id[metadata$condition == "tumor"])
+normal_donors <- sort(metadata$donor_id[metadata$condition == "normal"])
 if (!identical(tumor_donors, normal_donors)) {
-  stop("FPKM matrix CA/CAP donor IDs do not form exact tumour-normal pairs. Tumour-only: ",
+  stop("GEO donor IDs do not form exact tumour-normal pairs. Tumour-only: ",
        paste(setdiff(tumor_donors, normal_donors), collapse = ", "),
-       "; normal-only: ", paste(setdiff(normal_donors, tumor_donors), collapse = ", "));
+       "; normal-only: ", paste(setdiff(normal_donors, tumor_donors), collapse = ", "))
 }
 if (length(tumor_donors) != 30 || length(normal_donors) != 30) {
   stop("Expected 30 matched donors; found ", length(tumor_donors),
-       " tumour and ", length(normal_donors), " normal samples.");
+       " tumour and ", length(normal_donors), " normal samples.")
 }
-# Reorder expression columns to GEO metadata by the exact sample-description key.
-expr <- expr[, match(metadata$sample_description, colnames(expr)), drop = FALSE];
-if (ncol(expr) != nrow(metadata)) stop("Expression matrix and GEO metadata sample counts differ.");
-if (any(!is.finite(expr)) || any(expr < 0)) stop("FPKM matrix contains invalid or negative values.");
+# Reorder expression columns to the GEO metadata row order using the constructed
+# matrix identifier, which is based on the donor characteristic and tissue label.
+expr <- expr[, match(metadata$matrix_column, colnames(expr)), drop = FALSE]
+if (ncol(expr) != nrow(metadata)) stop("Expression matrix and GEO metadata sample counts differ.")
+if (any(!is.finite(expr)) || any(expr < 0)) stop("FPKM matrix contains invalid or negative values.")
 
 metadata$condition <- factor(metadata$condition, levels = c("normal", "tumor"))
 metadata$pair <- factor(metadata$pair, levels = paste0("donor", sort(unique(metadata$donor_id))))
@@ -153,9 +155,9 @@ normal_meta <- metadata[metadata$condition == "normal", , drop = FALSE]
 write.csv(data.frame(
   donor_id = pair_ids,
   tumor_sample = tumor_meta$geo_accession[match(pair_ids, tumor_meta$donor_id)],
-  tumor_matrix_column = tumor_meta$sample_description[match(pair_ids, tumor_meta$donor_id)],
+  tumor_matrix_column = tumor_meta$matrix_column[match(pair_ids, tumor_meta$donor_id)],
   normal_sample = normal_meta$geo_accession[match(pair_ids, normal_meta$donor_id)],
-  normal_matrix_column = normal_meta$sample_description[match(pair_ids, normal_meta$donor_id)],
+  normal_matrix_column = normal_meta$matrix_column[match(pair_ids, normal_meta$donor_id)],
   stringsAsFactors = FALSE
 ), file.path(outdir, "sample_pair_validation.csv"), row.names = FALSE)
 
