@@ -35,6 +35,7 @@ def run_gprofiler(label, query, background):
         "organism": "hsapiens",
         "query": query,
         "background": background,
+        "domain_scope": "custom",
         "sources": SOURCES,
         "user_threshold": 0.05,
         "significance_threshold_method": "g_SCS",
@@ -52,15 +53,29 @@ def run_gprofiler(label, query, background):
             with urllib.request.urlopen(request, timeout=90) as response:
                 body = json.loads(response.read().decode("utf-8"))
             break
+        except urllib.error.HTTPError as exc:
+            try:
+                detail = exc.read().decode("utf-8", errors="replace")
+            except Exception:
+                detail = str(exc)
+            last_error = RuntimeError(f"HTTP {exc.code}: {detail[:1000]}")
+            if exc.code < 500 or attempt == 2:
+                break
+            time.sleep(3 * (attempt + 1))
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             last_error = exc
             if attempt < 2:
                 time.sleep(3 * (attempt + 1))
     else:
-        raise RuntimeError(f"g:Profiler request failed for {label}: {last_error}")
+        body = None
 
+    if last_error is not None:
+        raise RuntimeError(f"g:Profiler request failed for {label}: {last_error}")
+    if isinstance(body, dict):
+        body = body.get("result", [])
     if not isinstance(body, list):
         raise RuntimeError(f"Unexpected g:Profiler response for {label}: {str(body)[:500]}")
+
 
     rows = []
     for term in body:
