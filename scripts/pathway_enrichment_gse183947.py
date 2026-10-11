@@ -79,6 +79,20 @@ def run_gprofiler(label, query, background):
 
     rows = []
     for term in body:
+        # Support response variants from g:Profiler's overlap field.
+        overlap = term.get("intersection", term.get("intersections", [])) or []
+        if isinstance(overlap, dict):
+            overlap = overlap.get("query", overlap.get("genes", [])) or []
+        if isinstance(overlap, str):
+            overlap_genes = overlap
+        elif isinstance(overlap, list):
+            overlap_genes = ";".join(
+                str(gene.get("name", gene.get("id", gene.get("gene", ""))))
+                if isinstance(gene, dict) else str(gene)
+                for gene in overlap
+            )
+        else:
+            overlap_genes = ""
         rows.append({
             "direction": label,
             "source": term.get("source", ""),
@@ -89,7 +103,7 @@ def run_gprofiler(label, query, background):
             "query_size": term.get("query_size", ""),
             "term_size": term.get("term_size", ""),
             "effective_domain_size": term.get("effective_domain_size", ""),
-            "intersecting_genes": ";".join(term.get("intersection", []) or []),
+            "intersecting_genes": overlap_genes,
         })
     rows.sort(key=lambda x: float(x["p_value"]) if x["p_value"] != "" else 1.0)
     output = os.path.join(OUTDIR, f"pathway_enrichment_{label}.csv")
@@ -100,7 +114,9 @@ def run_gprofiler(label, query, background):
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
-    print(f"{label}: {len(rows)} enriched terms saved to {output}")
+    with_overlap = sum(bool(row["intersecting_genes"]) for row in rows)
+    print(f"{label}: {len(rows)} enriched terms saved to {output}; "
+          f"{with_overlap} terms include overlap gene names")
     return rows
 
 
