@@ -1,0 +1,93 @@
+name: Upstream technical reproduction
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-reproduction-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  run-upstream-fixture:
+    name: Run pinned upstream test fixture
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out reproduction documentation
+        uses: actions/checkout@v4
+        with:
+          path: reproduction
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Nextflow
+        uses: nf-core/setup-nextflow@v2
+        with:
+          version: "26.04.6"
+
+      - name: Check out pinned upstream source
+        uses: actions/checkout@v4
+        with:
+          repository: sarvezh1/rna-seq-pipeline
+          ref: 7f56d14454948e295bae1db810a0f85e995a9d28
+          path: upstream
+          persist-credentials: false
+
+      - name: Record versions and pinned source
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -version
+          nextflow -version
+          docker --version
+          git -C upstream rev-parse HEAD | tee upstream_commit.txt
+          test "$(cat upstream_commit.txt)" = "7f56d14454948e295bae1db810a0f85e995a9d28"
+
+      - name: Run bundled technical fixture
+        working-directory: upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          nextflow run . \
+            -profile docker \
+            --input samplesheet.csv \
+            --genome_fasta test_data/reference/genome.fasta \
+            --gtf test_data/reference/genes.gtf \
+            --outdir results \
+            -work-dir /tmp/rnaseq_reproduction_work \
+            -with-report results/pipeline_info/execution_report.html \
+            -with-timeline results/pipeline_info/execution_timeline.html \
+            -with-trace results/pipeline_info/execution_trace.txt \
+            -with-dag results/pipeline_info/pipeline_dag.html
+
+      - name: Verify primary report outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s upstream/results/pipeline_info/execution_report.html
+          test -s upstream/results/pipeline_info/execution_timeline.html
+          test -s upstream/results/pipeline_info/execution_trace.txt
+          test -s upstream/results/pipeline_info/pipeline_dag.html
+          echo "Pinned upstream fixture completed and primary Nextflow reports exist."
+
+      - name: Upload reproduction evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-baseline-reports
+          path: |
+            upstream/results/pipeline_info/
+            upstream_commit.txt
+          if-no-files-found: warn
+          retention-days: 30
