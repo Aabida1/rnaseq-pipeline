@@ -57,7 +57,7 @@ extract_characteristic <- function(key) {
   lines <- geo_lines[startsWith(geo_lines, tag)];
   matching <- lines[vapply(lines, function(line) {
     payload <- sub("^!Sample_characteristics_ch1[[:space:]]+", "", line);
-    first_value <- strsplit(payload, "\\t", fixed = TRUE)[[1]][1];
+    first_value <- strsplit(payload, "\t", fixed = TRUE)[[1]][1];
     first_value <- gsub('^"|"$', "", first_value);
     grepl(paste0("^", key, "[[:space:]]*:"), first_value, ignore.case = TRUE)
   }, logical(1))];
@@ -65,7 +65,7 @@ extract_characteristic <- function(key) {
     stop("Expected one GEO characteristic row for '", key, "'; found ", length(matching), ".");
   }
   payload <- sub("^!Sample_characteristics_ch1[[:space:]]+", "", matching);
-  values <- strsplit(payload, "\\t", fixed = TRUE)[[1]];
+  values <- strsplit(payload, "\t", fixed = TRUE)[[1]];
   values <- gsub('^"|"$', "", values);
   if (length(values) != 60) {
     stop("Expected 60 values for GEO characteristic '", key, "'; found ", length(values), ".");
