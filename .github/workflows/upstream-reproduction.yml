@@ -26,7 +26,7 @@ jobs:
           path: reproduction
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -87,7 +87,7 @@ jobs:
         with:
           name: upstream-baseline-reports
           path: |
-            upstream/results/pipeline_info/
+            upstream/results/
             upstream_commit.txt
           if-no-files-found: warn
           retention-days: 30
