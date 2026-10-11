@@ -34,6 +34,20 @@ The first GitHub Actions run completed successfully on 11 October 2026.
 
 Evidence: [successful GitHub Actions run #1](https://github.com/Aabida1/rnaseq-pipeline/actions/runs/38166500002). The uploaded execution trace shows exit code 0 for all seven tasks. This verifies successful execution of the small technical fixture in that runner environment only. It does not establish human RNA-seq performance, biological validity, alignment quality thresholds, or accuracy of downstream scientific conclusions.
 
+## Real cancer dataset: GSE183947 breast cancer
+
+A separate workflow downloads the public GEO FPKM matrix for [GSE183947](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE183947), which contains 30 breast-tumour and 30 matched normal-tissue samples. The processed matrix is small (approximately 2.3 MB on GEO). See [dataset record](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE183947).
+
+**Important method distinction:** GEO provides FPKM-normalized expression values for this series, not raw gene counts. The analysis therefore uses limma on log2(FPKM + 1) with a paired design, rather than DESeq2. This is a processed-expression reanalysis and does not run the FASTQ → STAR → featureCounts stages. The original pinned technical baseline remains unchanged.
+
+Run it from the repository root with R and limma installed:
+
+```bash
+Rscript scripts/analyze_gse183947.R
+```
+
+Outputs are written to `cancer-results/`: a full limma table, FDR-filtered table, PCA and volcano PDFs, sample metadata, and a run summary. GitHub Actions runs the analysis and uploads these outputs as an artifact. Review the study's pairing metadata and QC before drawing scientific conclusions.
+
 ## Run locally
 
 Prerequisites: Git, Java compatible with Nextflow, Nextflow 26.04.6, and Docker.
